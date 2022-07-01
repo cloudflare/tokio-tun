@@ -5,7 +5,7 @@ use crate::linux::params::Params;
 use crate::tun::Tun;
 use core::convert::From;
 use libc::{IFF_NO_PI, IFF_TAP, IFF_TUN};
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 /// Represents a factory to build new instances of [`Tun`](struct.Tun.html).
 pub struct TunBuilder<'a> {
@@ -21,6 +21,8 @@ pub struct TunBuilder<'a> {
     destination: Option<Ipv4Addr>,
     broadcast: Option<Ipv4Addr>,
     netmask: Option<Ipv4Addr>,
+    address_v6: Option<Ipv6Addr>,
+    prefix_len_v6: u32,
 }
 
 impl<'a> Default for TunBuilder<'a> {
@@ -38,6 +40,8 @@ impl<'a> Default for TunBuilder<'a> {
             destination: None,
             broadcast: None,
             netmask: None,
+            address_v6: None,
+            prefix_len_v6: 128,
         }
     }
 }
@@ -140,6 +144,25 @@ impl<'a> TunBuilder<'a> {
         self
     }
 
+    /// Sets IPv6 address of device.
+    ///
+    /// Sending packets to this address is how they are delivered to your program.
+    /// This includes routing via this address.
+    pub fn address_v6(mut self, address: Ipv6Addr) -> Self {
+        self.address_v6 = Some(address);
+        self
+    }
+
+    /// Sets the IPv6 prefix length
+    ///
+    /// This is only useful when setting an IPv6 address via [`TunBuilder::address()`] because only
+    /// IPv6 addresses have the concept of prefixes. If IPv4 is used, call [`TunBuilder::netmask()`]
+    /// instead.
+    pub fn prefix_len_v6(mut self, prefix_len: u32) -> Self {
+        self.prefix_len_v6 = prefix_len;
+        self
+    }
+
     /// Makes the device persistent.
     ///
     /// Persistent devices stay registered as long as the computer is not restarted.
@@ -186,7 +209,7 @@ impl<'a> From<TunBuilder<'a>> for Params {
                 Some(builder.name.into())
             },
             flags: {
-                let mut flags = if builder.is_tap { IFF_TAP } else { IFF_TUN } as _;
+                let mut flags: i16 = if builder.is_tap { IFF_TAP } else { IFF_TUN } as _;
                 if !builder.packet_info {
                     flags |= IFF_NO_PI as i16;
                 }
@@ -201,6 +224,8 @@ impl<'a> From<TunBuilder<'a>> for Params {
             destination: builder.destination,
             broadcast: builder.broadcast,
             netmask: builder.netmask,
+            address_v6: builder.address_v6,
+            prefix_len_v6: builder.prefix_len_v6,
         }
     }
 

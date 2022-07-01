@@ -3,7 +3,7 @@
 #![allow(non_snake_case)]
 #![allow(dead_code)]
 
-use std::os::raw::{c_char, c_int, c_short, c_uchar, c_ulong, c_ushort};
+use std::os::raw::{c_char, c_int, c_short, c_uchar, c_uint, c_ulong, c_ushort};
 use std::{ffi::CStr, mem, ptr, str};
 
 const IFNAMSIZ: u32 = 16;
@@ -13,6 +13,14 @@ const IFNAMSIZ: u32 = 16;
 pub struct ifreq {
     pub ifr_ifrn: ifreq_ifrn,
     pub ifr_ifru: ifreq_ifru,
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct in6_ifreq {
+    pub ifr6_addr: in6_addr,
+    pub ifr6_prefixlen: c_uint,
+    pub ifr6_ifindex: c_int,
 }
 
 #[repr(C)]
@@ -31,6 +39,7 @@ pub union ifreq_ifru {
     pub ifru_netmask: sockaddr,
     pub ifru_hwaddr: sockaddr,
     pub ifru_flags: c_short,
+    pub ifru_ifindex: c_int,
     pub ifru_ivalue: c_int,
     pub ifru_mtu: c_int,
     pub ifru_map: ifmap,
@@ -46,6 +55,9 @@ pub struct sockaddr {
     pub sa_family: c_ushort,
     pub sa_data: [c_char; 14usize],
 }
+
+// See https://man7.org/linux/man-pages/man7/ipv6.7.html
+pub type in6_addr = libc::in6_addr;
 
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]

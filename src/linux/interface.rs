@@ -1,8 +1,9 @@
 use super::params::Params;
 use super::request::ifreq;
-use crate::linux::address::Ipv4AddrExt;
+use crate::linux::address::{Ipv4AddrExt, Ipv6AddrExt};
+use crate::linux::request::in6_ifreq;
 use crate::result::Result;
-use std::net::Ipv4Addr;
+use std::net::{Ipv4Addr, Ipv6Addr};
 
 nix::ioctl_write_int!(tunsetiff, b'T', 202);
 nix::ioctl_write_int!(tunsetpersist, b'T', 203);
@@ -12,6 +13,7 @@ nix::ioctl_write_int!(tunsetgroup, b'T', 206);
 nix::ioctl_write_ptr_bad!(siocsifmtu, libc::SIOCSIFMTU, ifreq);
 nix::ioctl_write_ptr_bad!(siocsifflags, libc::SIOCSIFFLAGS, ifreq);
 nix::ioctl_write_ptr_bad!(siocsifaddr, libc::SIOCSIFADDR, ifreq);
+nix::ioctl_write_ptr_bad!(siocsifaddr6, libc::SIOCSIFADDR, in6_ifreq);
 nix::ioctl_write_ptr_bad!(siocsifdstaddr, libc::SIOCSIFDSTADDR, ifreq);
 nix::ioctl_write_ptr_bad!(siocsifbrdaddr, libc::SIOCSIFBRDADDR, ifreq);
 nix::ioctl_write_ptr_bad!(siocsifnetmask, libc::SIOCSIFNETMASK, ifreq);
@@ -22,11 +24,13 @@ nix::ioctl_read_bad!(siocgifaddr, libc::SIOCGIFADDR, ifreq);
 nix::ioctl_read_bad!(siocgifdstaddr, libc::SIOCGIFDSTADDR, ifreq);
 nix::ioctl_read_bad!(siocgifbrdaddr, libc::SIOCGIFBRDADDR, ifreq);
 nix::ioctl_read_bad!(siocgifnetmask, libc::SIOCGIFNETMASK, ifreq);
+nix::ioctl_read_bad!(siocgifindex, 0x8933, ifreq);
 
 #[derive(Clone)]
 pub struct Interface {
     fds: Vec<i32>,
     socket: i32,
+    socket6: i32,
     name: String,
 }
 
@@ -43,6 +47,7 @@ impl Interface {
         Ok(Interface {
             fds,
             socket: unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) },
+            socket6: unsafe { libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0) },
             name: req.name().to_owned(),
         })
     }
@@ -68,6 +73,9 @@ impl Interface {
         }
         if let Some(broadcast) = params.broadcast {
             self.broadcast(Some(broadcast))?;
+        }
+        if let Some(address_v6) = params.address_v6 {
+            self.address_v6(address_v6, params.prefix_len_v6)?;
         }
         if params.persist {
             self.persist()?;
@@ -139,6 +147,22 @@ impl Interface {
         }
         unsafe { siocgifbrdaddr(self.socket, &mut req) }?;
         Ok(unsafe { Ipv4Addr::from_address(req.ifr_ifru.ifru_broadaddr) })
+    }
+
+    pub fn address_v6(&self, address: Ipv6Addr, prefix_len: u32) -> Result<()> {
+        let req = in6_ifreq {
+            ifr6_ifindex: self.index()?,
+            ifr6_prefixlen: prefix_len,
+            ifr6_addr: address.to_address(),
+        };
+        unsafe { siocsifaddr6(self.socket6, &req) }?;
+        Ok(())
+    }
+
+    fn index(&self) -> Result<::std::os::raw::c_int> {
+        let mut req = ifreq::new(self.name());
+        unsafe { siocgifindex(self.socket, &mut req) }?;
+        Ok(unsafe { req.ifr_ifru.ifru_ifindex })
     }
 
     pub fn flags(&self, flags: Option<i16>) -> Result<i16> {
